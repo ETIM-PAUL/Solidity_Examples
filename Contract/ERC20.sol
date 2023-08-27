@@ -9,7 +9,7 @@ contract MyERc20 {
     uint constant Decimal = 1e18;
 
     mapping(address => uint) _balance;
-    mapping(address => mapping(address => uint)) public allowance;
+    mapping(address => mapping(address => uint)) allowance;
 
     event Transfer(address to, uint sentValue);
     event Approval(address _from, address _to, uint approvedValue);
@@ -58,6 +58,13 @@ contract MyERc20 {
         _balance[from] -= amountTo;
         _balance[to] += amountTo;
         emit Approval(from, to, amountTo);
+    }
+
+    function allowanceSet(
+        address _owner,
+        address _spender
+    ) public view returns (uint _allowance) {
+        _allowance = allowance[_owner][_spender];
     }
 
     function mintToken(address mintAddress, uint value) public {
