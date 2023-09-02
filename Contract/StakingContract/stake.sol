@@ -14,7 +14,8 @@ interface ERC20Token {
     function buyToken() external returns (uint);
 
     function approve(address spender, uint256 amount) external;
-    // function withdrawEther() external;
+
+    function transfer(address to, uint amount) external returns (bool);
 }
 
 interface ERC20TokenReward {
@@ -93,7 +94,7 @@ contract StakeTokens {
                 _staker.stakedTime = block.timestamp;
                 _staker.stakedAmount = amount;
             } else {
-                //if the stake is higher than 1000 WURA tokens and its not your first staking, add 5 tokens to staker
+                //if the stake is higher than 1000 WURA tokens and its not first staking, increase hughStakedTimes
                 if (amount >= HugeStakedValue && _staker.stakedAmount != 0) {
                     _staker.hugeStakedValueTimes++;
                     _staker.hugeStakedValue = true;
@@ -110,6 +111,19 @@ contract StakeTokens {
         } else {
             revert("Staking Failed");
         }
+    }
+
+    //pays ur rewards in BigJoe Tokens
+    function withdrawStaked(uint amount) external returns (bool success) {
+        require(amount > 0, "Value must be greater than Zero");
+        Staker storage _staker = stakedBalance[msg.sender];
+        require(_staker.stakedAmount >= amount, "Insufficient funds");
+        _staker.stakedAmount -= amount;
+        WuraToken.transfer(msg.sender, amount);
+
+        //calculate Accured Rewards
+        calculateAccuredReward();
+        return success = true;
     }
 
     //pays ur rewards in BigJoe Tokens
@@ -141,5 +155,6 @@ contract StakeTokens {
         uint difference = block.timestamp - _staker.stakedTime;
         _staker.totalReward = ((difference * (_staker.stakedAmount) * 50) /
             SecondsInMonth);
+        _staker.stakedTime = block.timestamp;
     }
 }
