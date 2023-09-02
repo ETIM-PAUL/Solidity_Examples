@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.8.18;
+pragma solidity 0.8.19;
 
 interface ERC20Token {
     function balanceOf(address account) external returns (uint);
@@ -17,19 +17,34 @@ interface ERC20Token {
     // function withdrawEther() external;
 }
 
+interface ERC20TokenReward {
+    function balanceOf(address account) external returns (uint);
+
+    function transfer(address to, uint amount) external returns (bool);
+}
+
 contract StakeTokens {
     ERC20Token WuraToken;
+    ERC20TokenReward BigJoeToken;
     struct Staker {
         uint stakedAmount;
-        uint firstStakedTime;
+        uint stakedTime;
+        uint totalReward;
         uint hugeStakedValueTimes;
         bool hugeStakedValue;
     }
     mapping(address => Staker) stakedBalance;
     uint private constant HugeStakedValue = 1000;
+    uint private constant SecondsInMonth = 18_748_800;
+
+    event TokenStaked(address staker, uint amount);
+    event RewardClaimed(address staker, uint amount);
 
     constructor() {
         WuraToken = ERC20Token(0x8Bc4b37aff83FdA8a74d2b5732437037B801183e);
+        BigJoeToken = ERC20TokenReward(
+            0x8Bc4b37aff83FdA8a74d2b5732437037B801183e
+        );
     }
 
     modifier isTokenHolder() {
@@ -66,34 +81,65 @@ contract StakeTokens {
 
     function stake(uint amount) external isTokenHolder {
         //  address(ERC20StandardToken).call(abi.encodeWithSignature("approve(address,uint)", address(this), amount));
+        Staker storage _staker = stakedBalance[msg.sender];
+
         require(amount > 0, "Staking Amount must be greater than zero(0)");
-        _transferFrom(amount);
+
+        (bool success, ) = _transferFrom(amount);
+
+        if (success) {
+            //if this is a first stake, set timestamp
+            if (_staker.stakedAmount == 0) {
+                _staker.stakedTime = block.timestamp;
+                _staker.stakedAmount = amount;
+            } else {
+                //if the stake is higher than 1000 WURA tokens and its not your first staking, add 5 tokens to staker
+                if (amount >= HugeStakedValue && _staker.stakedAmount != 0) {
+                    _staker.hugeStakedValueTimes++;
+                    _staker.hugeStakedValue = true;
+                    _staker.stakedAmount += amount;
+                } else {
+                    _staker.stakedAmount += amount;
+                }
+
+                //calcaulate accured reward
+                calculateAccuredReward();
+            }
+
+            emit TokenStaked(msg.sender, amount);
+        } else {
+            revert("Staking Failed");
+        }
+    }
+
+    //pays ur rewards in BigJoe Tokens
+    function claimReward(uint amount) external returns (bool success) {
+        require(amount > 0, "Value must be greater than Zero");
+        require(
+            BigJoeToken.balanceOf(address(this)) >= amount,
+            "Please Try Later"
+        );
+
+        //calculate Accured Rewards
+        calculateAccuredReward();
+        Staker storage _staker = stakedBalance[msg.sender];
+        require(_staker.totalReward >= amount, "Insufficient Reward");
+        _staker.totalReward -= amount;
+        BigJoeToken.transfer(msg.sender, amount);
+        return success = true;
     }
 
     function _transferFrom(
         uint amount
     ) internal returns (bool success, bytes memory data) {
-        Staker storage _staker = stakedBalance[msg.sender];
         WuraToken.transferFrom(msg.sender, address(this), amount);
-
-        //if this is a first stake, set timestamp
-        if (_staker.stakedAmount == 0) {
-            _staker.firstStakedTime = block.timestamp;
-        }
-
-        //if the stake is higher than 1000 WURA tokens, add 5 tokens to staker
-        if (_staker.stakedAmount >= HugeStakedValue) {
-            _staker.stakedAmount += (amount + 5);
-            _staker.hugeStakedValueTimes++;
-            _staker.hugeStakedValue = true;
-        }
-        //if the stake is higher than 1000 WURA tokens, add 5 tokens to staker
-        else {
-            _staker.stakedAmount += amount;
-        }
-        calculateAccuredReward();
         return (success, data);
     }
 
-    function calculateAccuredReward() internal returns (bool accured) {}
+    function calculateAccuredReward() private {
+        Staker storage _staker = stakedBalance[msg.sender];
+        uint difference = block.timestamp - _staker.stakedTime;
+        _staker.totalReward = ((difference * (_staker.stakedAmount) * 50) /
+            SecondsInMonth);
+    }
 }
