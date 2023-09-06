@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.8.18;
+pragma solidity 0.8.21;
 
 interface ERC20Token {
     function balanceOf(address account) external returns (uint);
@@ -69,22 +69,29 @@ contract StakeTokens {
 
     //pays ur rewards in BigJoe Tokens
     function claimReward() external returns (bool success) {
-        Staker storage _staker = stakedBalance[msg.sender];
+        //This makes sure the reward to be claim is below the staking
+        //contract reward token balance. If so, try again.
         require(
-            _staker.totalReward < BigJoeToken.balanceOf(address(this)),
+            stakedBalance[msg.sender].totalReward <
+                BigJoeToken.balanceOf(address(this)),
             "Try Again Later"
         );
 
-        //calculate Accured Rewards
+        //re-calculate Accured Rewards since the last staked time
         calculateAccuredReward();
-        require(_staker.totalReward > 0, "No Reward");
+        uint _stakerReward = stakedBalance[msg.sender].totalReward;
 
-        BigJoeToken.transfer(msg.sender, _staker.totalReward);
-        WuraToken.transfer(msg.sender, _staker.stakedAmount);
-        _staker.totalReward = 0;
-        _staker.stakedAmount = 0;
-        _staker.stakedTime = 0;
-        emit RewardClaimed(msg.sender, _staker.totalReward);
+        //This makes sure
+        require(_stakerReward > 0, "No Reward");
+
+        stakedBalance[msg.sender].totalReward = 0;
+        stakedBalance[msg.sender].stakedAmount = 0;
+        stakedBalance[msg.sender].stakedTime = 0;
+        emit RewardClaimed(msg.sender, _stakerReward);
+
+        BigJoeToken.transfer(msg.sender, _stakerReward);
+        WuraToken.transfer(msg.sender, _stakerReward);
+
         return success = true;
     }
 
